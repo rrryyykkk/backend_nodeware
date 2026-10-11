@@ -18,11 +18,10 @@ enum Role {
   INTERNAL
 }
 
-enum Departement {
+enum Department {
   UIUX
   BACKEND
   FRONTEND
-
 }
 
 enum TaskStatus {
@@ -33,8 +32,9 @@ enum TaskStatus {
 
 model User {
   id           String      @id @default(cuid())
+  public_id    String      @unique @default(uuid(7))
   email        String      @unique
-  passwordHash String
+  password     String
   name         String
   avatarUrl    String?
   role         Role
@@ -53,6 +53,7 @@ model User {
 
 model Project {
   id          String    @id @default(cuid())
+  public_id   String      @unique @default(uuid(7))
   name        String
   description String?
   createdAt   DateTime  @default(now())
@@ -62,4 +63,123 @@ model Project {
   members   ProjectMember[]
   tasks     Task[]
   auditLogs TaskAuditLog[]
+}
+
+// Client Guest juga jadi member project miliknya (role di User = CLIENT).
+model ProjectMember {
+  id        String    @id @default(cuid())
+  projectId String
+  userId    String
+  createdAt DateTime  @default(now())
+  deletedAt DateTime?
+
+  project Project @relation(fields: [projectId], references: [id])
+  user    User    @relation(fields: [userId], references: [id])
+
+  @@unique([projectId, userId])
+  @@index([userId])
+}
+
+model Task {
+  id            String     @id @default(cuid())
+  public_id     String     @unique @default(uuid(7))
+  projectId     String     
+  title         String
+  description   String
+  status        TaskStatus @default(TODO)
+  department    Department // departemen pelaksana task
+  assigneeId    String?
+  createdById   String
+  clientVisible Boolean    @default(false) // diatur PM
+  version       Int        @default(0)     // optimistic locking
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+  deletedAt     DateTime?
+
+  project   Project @relation(fields: [projectId], references: [id])
+  assignee  User?   @relation("TaskAssignee", fields: [assigneeId], references: [id])
+  createdBy User    @relation("TaskCreator", fields: [createdById], references: [id])
+
+  // dependsOn : prasyarat yang HARUS selesai dulu sebelum task ini
+  // blocking  : task-task yang menunggu task ini
+  dependsOn TaskDependency[] @relation("DependentTask")
+  blocking  TaskDependency[] @relation("PrerequisiteTask")
+
+  comments    Comment[]
+  attachments Attachment[]
+  auditLogs   TaskAuditLog[]
+
+  @@index([projectId, status])
+  @@index([projectId, department])
+  @@index([assigneeId])
+}
+
+// Edge graph: taskId menunggu dependsOnId (prasyarat)
+model TaskDependency {
+  id          String    @id @default(cuid())
+  taskId      String    // task yang menunggu (misal Task C)
+  dependsOnId String    // prasyarat (misal Task A / Task B)
+  createdAt   DateTime  @default(now())
+  deletedAt   DateTime? // soft delete; saat dibuat ulang, restore (clear deletedAt)
+
+  task      Task @relation("DependentTask", fields: [taskId], references: [id])
+  dependsOn Task @relation("PrerequisiteTask", fields: [dependsOnId], references: [id])
+
+  @@unique([taskId, dependsOnId])
+  @@index([dependsOnId])
+}
+
+model Comment {
+  id         String    @id @default(cuid())
+  public_id  String    @unique @default(uuid(7))
+  taskId     String    
+  authorId   String
+  body       String
+  isInternal Boolean   @default(true) // Client tidak pernah menerima ini
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  deletedAt  DateTime?
+
+  task   Task @relation(fields: [taskId], references: [id])
+  author User @relation(fields: [authorId], references: [id])
+
+  @@index([taskId])
+}
+
+model Attachment {
+  id         String    @id @default(cuid())
+  public_id  String    @unique @default(uuid(7))
+  taskId     String
+  uploaderId String
+  fileName   String
+  url        String
+  mimeType   String?
+  size       Int?
+  createdAt  DateTime  @default(now())
+  deletedAt  DateTime?
+
+  task     Task @relation(fields: [taskId], references: [id])
+  uploader User @relation(fields: [uploaderId], references: [id])
+
+  @@index([taskId])
+}
+
+// APPEND-ONLY. Jangan buat endpoint update/delete untuk tabel ini.
+// Tidak ada updatedAt/deletedAt by design (immutable).
+model TaskAuditLog {
+  id        String   @id @default(cuid())
+  taskId    String
+  projectId String   // denormalisasi untuk query standup per project
+  userId    String
+  column    String   // "status" | "description" | "assigneeId" | ...
+  oldValue  String?
+  newValue  String?
+  createdAt DateTime @default(now())
+
+  task    Task    @relation(fields: [taskId], references: [id])
+  project Project @relation(fields: [projectId], references: [id])
+  user    User    @relation(fields: [userId], references: [id])
+
+  @@index([taskId, createdAt])
+  @@index([projectId, createdAt])
 }

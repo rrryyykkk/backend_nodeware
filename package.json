@@ -4,11 +4,18 @@
   "type": "module",
   "scripts": {
     "dev": "bun --watch index.ts",
-    "start": "bun index.ts"
+    "start": "bun index.ts",
+    "db:generate": "prisma generate --config prisma7.config.ts",
+    "db:migrate": "prisma migrate dev --config prisma7.config.ts && prisma generate --config prisma7.config.ts",
+    "db:deploy": "prisma migrate deploy --config prisma7.config.ts",
+    "seed": "bun prisma/seed.ts",
+    "test": "bun test"
   },
   "private": true,
   "devDependencies": {
+    "@types/bcrypt": "^6.0.0",
     "@types/bun": "latest",
+    "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^26.6.4",
     "@types/pg": "^8.23.1",
     "prisma": "^7.10.0",
@@ -21,8 +28,10 @@
     "@nodewave/prisma-ezfilter": "^0.2.1",
     "@prisma/adapter-pg": "^7.10.0",
     "@prisma/client": "7",
+    "bcrypt": "^6.0.0",
     "dotenv": "^18.0.6",
     "hono": "^4.13.13",
+    "ioredis": "^6.0.0",
     "jsonwebtoken": "^9.0.3",
     "pg": "^8.23.1",
     "zod": "^4.6.5"
